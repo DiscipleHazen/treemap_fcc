@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Treemap</title>
+    <meta name="viewport" , width="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <style>
+        body {
+            text-align: center;
+        }
+        #button-div {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="title"></h1>
+    <h2 id="description"></h2>
+    <div id="button-div">
+        <button id="movie">Movie Stats</button>
+        <button id="game">Game Stats</button>
+        <button id="kickstarter">Kickstarter Stats</button>
+    </div>
+    <div id="tooltip"></div>
+    <svg id="data"></svg>
+
+</body>
+
+</html>
+<script type="module">
+
+    import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+    const movieBtn = document.getElementById('movie');
+    const gameBtn = document.getElementById('game');
+    const kickstarterBtn = document.getElementById('kickstarter');
+
+    Promise.all([
+        fetch('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/movie-data.json'),
+        fetch('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/video-game-sales-data.json'),
+        fetch('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/kickstarter-funding-data.json')
+    ])
+        .then(responses => Promise.all(responses.map(response => response.json())))
+        .then(data => {
+
+            const movieStats = data[0];
+            const gameStats = data[1];
+            const kickStats = data[2];
+            console.log(movieStats);
+            console.log(gameStats);
+            console.log(kickStats);
+            const w = 1000;
+            const h = 1000;
+            const title = document.getElementById('title');
+            const description = document.getElementById('description');
+            const tree = d3.select('#data')
+                .attr('height', h)
+                .attr('width', w)
+
+
+                
+            function selectData(data) {
+                tree.selectAll('*').remove()
+
+                if(data.name === 'Movies') {
+                    title.innerText = "Movie Gross Sales";
+                    description.innerText = "Top 100 movies by gross sales grouped by Genre"
+                } else if (data.name === "Video Game Sales Data Top 100") {
+                    title.innerText = "Video Game Sales";
+                    description.innerText = 'Top 100 videos games by units sold grouped by platform';
+                } else {
+                    title.innerText = "Kickstarter Pledges"
+                    description.innerText = "Top 100 pledged Kickstarters grouped by category";
+                }
+
+                const tooltip = d3.select('#tooltip');
+
+                const categories = data.children.map((cat) => cat.name)
+
+                const color = d3.scaleOrdinal()
+                .domain(categories)
+                .range(d3.schemeCategory10)
+
+                const root = d3.hierarchy(data)
+                    .sum(d => Number(d.value))
+                    .sort((a, b) => b.value - a.value);
+                d3.treemap()
+                    .size([w, h - 300])
+                    .paddingInner(0)
+                    .paddingOuter(0)
+                    (root)
+
+
+                console.log(root.leaves())
+                tree.selectAll('rect')
+                    .data(root.leaves())
+                    .enter()
+                    .append('rect')
+                    .attr('class', 'tile')
+                    .attr('x', d => d.x0)
+                    .attr('y', d => d.y0)
+                    .attr('width', d => d.x1 - d.x0)
+                    .attr('height', d => d.y1 - d.y0)
+                    .attr('fill', d => color(d.data.category))
+                    .attr('stroke', 'black')
+                    .attr('data-name', d => d.data.name)
+                    .attr('data-category', d => d.data.category)
+                    .attr('data-value', d => Number(d.data.value))
+                    .on('mouseover', function(event, d){
+                        tooltip
+                            .style('opacity', 0.8)
+                            .attr('data-value', d.data.value)
+                            .html(`${d.data.name}<br/>${d.data.category}<br/>${d.data.value}`)
+                            .style('width', '100px')
+                            .style('padding', '10px')
+                            .style('position', 'absolute')
+                            .style('background-color', 'white')
+                            .style('border', '1px solid black')
+                            .style('left', (event.pageX + 20) + 'px')
+                            .style('top', (event.pageY + 20) + 'px')
+                    })
+                    .on('mousemove', function(event) {
+                        tooltip 
+                            .style('left', (event.pageX + 20) + 'px')
+                            .style('top', (event.pageY + 20) + 'px')
+                    })
+                    .on('mouseout', function(event) {
+                        tooltip
+                            .style('opacity', 0);
+                    })
+
+                tree.selectAll('text')
+                    .data(root.leaves())
+                    .enter()
+                    .append('text')
+                    .attr('x', d => d.x0 + 5)
+                    .attr('y', d => d.y0 + 14)
+                    .style('font-size', '12px')
+                    .style('pointer-events', 'none')
+                    .each(function (d) {
+                        const lineHeight = 11;
+                        const words = d.data.name.split(' ');
+                        const textElem = d3.select(this);
+                        let k = 0;
+                        words.forEach((word, i) => {
+                            if (k > 3) {
+                                return;
+                            }
+                            const tspan = textElem.append('tspan')
+                                .text(word)
+                                .attr('x', d.x0 + 3)
+                                .attr('y', d.y0 + lineHeight + i * lineHeight)
+                            if (tspan.node().getComputedTextLength() > (d.x1 - d.x0 - 10)) {
+                                let shortened = word;
+                                while (tspan.node().getComputedTextLength() > (d.x1 - d.x0 - 10) 
+                                && shortened.length > 1) {
+                                    shortened = shortened.slice(0, -1);
+                                    tspan.text(shortened + '…');
+                                }
+                            }
+                            k += 1;
+                        })
+                    })
+                
+                const legend = tree.append('g')
+                                    .attr('id', 'legend')
+                                    .attr('transform', 'translate(200, 710)')
+                
+                const columns = 3;
+                categories.forEach((cat, i) => {
+                    const col = i % columns;
+                    const row = Math.floor(i / columns);
+                    const legendRow = legend.append('g')
+                        .attr('transform', `translate(${col * 135}, ${row * 25})`)
+                    legendRow.append('rect')
+                        .attr('class', 'legend-item')
+                        .attr('width', 18)
+                        .attr('height', 18)
+                        .attr('fill', color(cat))
+                    
+                    legendRow.append('text')
+                        .attr('x', 24)
+                        .attr('y', 14)
+                        .text(cat)
+                })
+
+
+            }
+            
+
+            selectData(movieStats);
+
+            movieBtn.addEventListener('click', () => {
+                selectData(movieStats);
+            })
+            gameBtn.addEventListener('click', () => {
+                selectData(gameStats);
+            })
+            kickstarterBtn.addEventListener('click', () => {
+                selectData(kickStats);
+            })
+
+
+
+
+
+
+        })
+
+</script>
